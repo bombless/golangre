@@ -145,33 +145,52 @@ func(this Rune)Match(r rune)bool{
 func makeRune(r rune)Rune{
     return Rune{r}
 }
-type PositiveClass struct{
+type EnumClass struct{
     Set map[rune]struct{}
 }
-func(c PositiveClass)Match(r rune)bool{
+func(c EnumClass)Match(r rune)bool{
     _, ret := c.Set[r]
     return ret
 }
-func makePositiveClass(arr []Rune)PositiveClass{
-    s := PositiveClass{map[rune]struct{}{}}
+func makeEnumClass(arr []Rune)EnumClass{
+    s := EnumClass{map[rune]struct{}{}}
     for _, v := range arr{
         s.Set[v.Value] = struct{}{}
     }
     return s
+}
+type RangeClass struct{
+    Min rune
+    Max rune
+}
+func(c RangeClass)Match(r rune)bool{
+    return r >= c.Min && r <= c.Max
+}
+func makeRangeClass(min rune, max rune)RangeClass{
+    return RangeClass{min, max}
+}
+type MixedClass struct{
+    Collection []CanMatch
+}
+func (c MixedClass)Match(r rune)bool{
+    for _, v := range c.Collection{
+        if v.Match(r){
+            return true
+        }
+    }
+    return false
+}
+func makeMixedClass(collection ...CanMatch)MixedClass{
+    return MixedClass{collection}
 }
 type NegativeClass struct{
-    Set map[rune]struct{}
+    Value MixedClass
 }
 func(c NegativeClass)Match(r rune)bool{
-    _, ret := c.Set[r]
-    return !ret
+    return !c.Value.Match(r)
 }
-func makeNegativeClass(arr []Rune)NegativeClass{
-    s := NegativeClass{map[rune]struct{}{}}
-    for _, v := range arr{
-        s.Set[v.Value] = struct{}{}
-    }
-    return s
+func makeNegativeClass(c MixedClass)NegativeClass{
+    return NegativeClass{c}
 }
 type Group struct{
     Content []interface{}
@@ -242,7 +261,9 @@ func typeName(i interface{})string{
     case "re.Pipe": return "Pipe"
     case "int32": return "rune"
     case "re.Rune": return "Rune"
-    case "re.PositiveClass": return "PositiveClass"
+    case "re.EnumClass": return "EnumClass"
+    case "re.RangeClass": return "RangeClass"
+    case "re.MixedClass": return "MixedClass"
     case "re.NegativeClass": return "NegativeClass"
     case "*errors.errorString": return "error"
     }
@@ -299,27 +320,44 @@ func funcClassEnd(item interface{}, stack []interface{})([]interface{}, error){
     if i < 0{
         return stack, errors.New("unexpected ClassEnd")
     }
-    pack := []Rune{}
+    pack := []CanMatch{}
     for j := i + 1; j < len(stack); j += 1{
         name := typeName(stack[j])
         if name != "Rune"{
             fmt.Printf("#line300, %v\n", stack)
             return stack, errors.New(fmt.Sprintf("unexpected %v", name))
         }
-        pack = append(pack, stack[j].(Rune))
+        r := stack[j].(Rune)
+        if r.Value == '-' && j > i + 1 && j < len(stack) - 1{
+            min, max := stack[j - 1].(Rune), stack[j + 1].(Rune)
+            if min.Value > max.Value{
+                return stack, errors.New(fmt.Sprintf("value of %v bigger than %v", min.Value, max.Value))
+            }
+            pack[len(pack) - 1] = makeRangeClass(min.Value, max.Value)
+            j += 1
+        }else{
+            pack = append(pack, r)
+        }
     }
     stack = stack[:i]
-    var c CanMatch
-    if len(pack) == 0{
-        return stack, errors.New("Empty positive class not allowed")
-    }else if pack[0].Value != '^'{
-            c = makePositiveClass(pack)
-    }else if len(pack) == 1{
-        return stack, errors.New("Empty  negative class not allowed")
-    }else{
-        c = makeNegativeClass(pack[1:])
+    needNegative := typeName(pack[0]) == "Rune" && pack[0].(Rune).Value == '^'
+    if needNegative{
+        pack = pack[1:]
     }
-    return append(stack, c), nil    
+    rangeCollection := []CanMatch{}
+    runeCollection := []CanMatch{}
+    for _, v := range pack{
+        if typeName(v) == "Rune"{
+            runeCollection = append(runeCollection, v)
+        }else{
+            rangeCollection = append(rangeCollection, v)
+        }
+    }
+    mixedClass := makeMixedClass(append(rangeCollection, runeCollection...)...)
+    if needNegative{
+        return append(stack, makeNegativeClass(mixedClass)), nil
+    }
+    return append(stack, mixedClass), nil    
 }
 func funcKleene(item interface{}, stack []interface{})([]interface{}, error){
     for _, v := range stack{
@@ -395,7 +433,7 @@ func construct(seq []interface{})(FiniteAutomachine, error){
     }else if len(seq) == 1{
         switch typeName(seq[0]){
             case "Group": return construct(seq[0].(Group).Content)
-            case "PositiveClass": return singleTransition(seq[0].(PositiveClass)), nil
+            case "MixedClass": return singleTransition(seq[0].(MixedClass)), nil
             case "NegativeClass": return singleTransition(seq[0].(NegativeClass)), nil
             case "Rune": return singleTransition(seq[0].(Rune)), nil
         }
@@ -405,6 +443,7 @@ func construct(seq []interface{})(FiniteAutomachine, error){
     for i, v := range seq{
         if typeName(v) == "Pipe"{
             pipe = i
+            break
         }
     }
     if pipe > -1{

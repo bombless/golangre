@@ -44,4 +44,8 @@ func main(){
     testRE("[abc]*([de]|fg)*h", false, "acbgdh", "dfh")
     testRE("[^cat]*", true, "user", "feels", "good")
     testRE("[^cat]*", false, "little", "cat")
+    testRE("dog|cat|fish", true, "dog", "cat", "fish")
+    testRE("dog|cat|fish", false, "", "orange", "apple")
+    testRE("[_a-zA-Z][_a-zA-Z0-9]*", true, "one", "_two")
+    testRE("[_a-zA-Z][_a-zA-Z0-9]*", false, "1apple", "one space")
 }
