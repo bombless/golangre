@@ -2,7 +2,7 @@ package main
 
 import(
     "fmt"
-    "./re"
+    "github.com/bombless/golangre/alpha/re"
     )
 func testRE(reg string, expect bool, str ...string){
     fmt.Printf("tesing RE/%v/\n", reg)
