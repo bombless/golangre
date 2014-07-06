@@ -40,4 +40,6 @@ func main(){
     testRE("abc", false, "", "a")
     testRE("(abc)*", true, "", "abc", "abcabcabc")
     testRE("(abc)*", false, "a", "c", "cba")
+    testRE("[abc]*([de]|fg)*h", true, "acbdh", "dh", "fgfgh")
+    testRE("[abc]*([de]|fg)*h", false, "acbgdh", "dfh")
 }

@@ -145,7 +145,7 @@ type Class struct{
 type Group struct{
     Content []interface{}
 }
-type handleFunction func(interface{}, *[]interface{})interface{}
+type handleFunction func(interface{}, []interface{})([]interface{}, error)
 type Pipe struct{}
 type Kleene struct{}
 type GroupStart struct{}
@@ -229,80 +229,73 @@ func chooseFunction(item interface{})handleFunction{
     }
     return funcError
 }
-func funcError(item interface{}, stack *[]interface{})interface{}{
-    return errors.New("unexpected input")
+func funcError(item interface{}, stack []interface{})([]interface{}, error){
+    return stack, errors.New("unexpected input")
 }
-func funcGroupStart(item interface{}, stack *[]interface{})interface{}{
-    *stack = append(*stack, GroupStart{})
-    return ""
+func funcGroupStart(item interface{}, stack []interface{})([]interface{}, error){
+    return append(stack, GroupStart{}), nil
 }
-func funcGroupEnd(item interface{}, stack *[]interface{})interface{}{
-    i := len(*stack) - 1
-    for i >= 0 && typeName((*stack)[i]) != "GroupStart"{
+func funcGroupEnd(item interface{}, stack []interface{})([]interface{}, error){
+    i := len(stack) - 1
+    for i >= 0 && typeName(stack[i]) != "GroupStart"{
         i -= 1
     }
     if i < 0{
-        return errors.New("unexpected GroupEnd")
+        return stack, errors.New("unexpected GroupEnd")
     }
     pack := []interface{}{}
-    for j := i + 1; j < len(*stack); j += 1{
-        name := typeName((*stack)[j])
+    for j := i + 1; j < len(stack); j += 1{
+        name := typeName(stack[j])
         if name == "ClassStart" || name == "ClassEnd" || name == "GroupEnd"{
-            return errors.New(fmt.Sprintf("unexpected %v", name))
+            return stack, errors.New(fmt.Sprintf("unexpected %v", name))
         }
-        pack = append(pack, (*stack)[j])
+        pack = append(pack, stack[j])
     }
-    *stack = (*stack)[:i]
-    *stack = append(*stack, Group{pack})
-    return ""
+    stack = stack[:i]
+    return append(stack, Group{pack}), nil
 }
-func funcClassStart(item interface{}, stack *[]interface{})interface{}{
-    *stack = append(*stack, ClassStart{})
-    return ""
+func funcClassStart(item interface{}, stack []interface{})([]interface{}, error){
+    return append(stack, ClassStart{}), nil
 }
-func funcClassEnd(item interface{}, stack *[]interface{})interface{}{
-    i := len(*stack) - 1
-    for i >= 0 && typeName((*stack)[i]) != "ClassStart"{
+func funcClassEnd(item interface{}, stack []interface{})([]interface{}, error){
+    i := len(stack) - 1
+    for i >= 0 && typeName(stack[i]) != "ClassStart"{
         i -= 1
     }
     if i < 0{
-        return errors.New("unexpected ClassEnd")
+        return stack, errors.New("unexpected ClassEnd")
     }
     pack := []interface{}{}
-    for j := i + 1; j < len(*stack); j += 1{
-        name := typeName((*stack)[j])
+    for j := i + 1; j < len(stack); j += 1{
+        name := typeName(stack[j])
         if name == "GroupStart" || name == "GroupEnd" || name == "ClassEnd"{
-            return errors.New(fmt.Sprintf("unexpected %v", name))
+            return stack, errors.New(fmt.Sprintf("unexpected %v", name))
         }
-        pack = append(pack, (*stack)[j])
+        pack = append(pack, stack[j])
     }
-    *stack = (*stack)[:i]
-    *stack = append(*stack, Class{pack})
-    return ""
+    stack = stack[:i]
+    return append(stack, Class{pack}), nil
 }
-func funcKleene(item interface{}, stack *[]interface{})interface{}{
-    for _, v := range *stack{
+func funcKleene(item interface{}, stack []interface{})([]interface{}, error){
+    for _, v := range stack{
         name := typeName(v)
         if name == "ClassStart" || name == "ClassEnd"{
-            return errors.New("can not have kleene in class")
+            return stack, errors.New("can not have kleene in class")
         }
     }
-    *stack = append(*stack, Kleene{})
-    return ""
+    return append(stack, Kleene{}), nil
 }
-func funcPipe(item interface{}, stack *[]interface{})interface{}{
-    for _, v := range *stack{
+func funcPipe(item interface{}, stack []interface{})([]interface{}, error){
+    for _, v := range stack{
         name := typeName(v)
         if name == "ClassStart" || name == "ClassEnd"{
-            return errors.New("can not have pipe in class")
+            return stack, errors.New("can not have pipe in class")
         }
     }
-    *stack = append(*stack, Pipe{})
-    return ""
+    return append(stack, Pipe{}), nil
 }
-func funcRune(item interface{}, stack *[]interface{})interface{}{
-    *stack = append(*stack, item)
-    return ""
+func funcRune(item interface{}, stack []interface{})([]interface{}, error){
+    return append(stack, item), nil
 }
 func compile(seq []interface{})([]interface{}, error){
     if len(seq) == 0{
@@ -311,9 +304,10 @@ func compile(seq []interface{})([]interface{}, error){
     stack := []interface{}{}
     for _, item := range seq{
         fun := chooseFunction(item)
-        val := fun(item, &stack)
-        if typeName(val) == "error"{
-            return []interface{}{}, val.(error)
+        var err error
+        stack, err = fun(item, stack)
+        if err != nil{
+            return []interface{}{}, err
         }
     }
     for _, v := range stack{
@@ -323,7 +317,6 @@ func compile(seq []interface{})([]interface{}, error){
             return []interface{}{}, errors.New(fmt.Sprintf("unexpected %v", name))
         }
     }
-    
     return stack, nil
 }
 func handle(reg string)([]interface{}, error){
