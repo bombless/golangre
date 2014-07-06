@@ -5,22 +5,22 @@ import(
     "./re"
     )
 func testRE(reg string, expect bool, str ...string){
+    fmt.Printf("tesing RE/%v/\n", reg)
     fa, err := re.RegExp(reg)
     if nil != err{
         fmt.Println(err)
         return
     }
     for _, val := range str{
+        display := val
         if(val == ""){
-            fmt.Print("testing <Empty String>...")
-        }else{
-            fmt.Print("testing ", val, "... ")
+            display = "<Empty String>"
         }
         te := fa.Test(val)
         if te == expect{
-            fmt.Println("passed")
+            fmt.Printf("passed: %v=RE/%v/.Test(%v)\n", expect, reg, display)
         }else{
-            fmt.Println("error: expect ", expect, ", got ", te, " instead")
+            fmt.Printf("error: expect %v=RE/%v/.Test(%v), got %v instead\n", expect, reg, display, te)
         }
     }
 }
@@ -42,4 +42,6 @@ func main(){
     testRE("(abc)*", false, "a", "c", "cba")
     testRE("[abc]*([de]|fg)*h", true, "acbdh", "dh", "fgfgh")
     testRE("[abc]*([de]|fg)*h", false, "acbgdh", "dfh")
+    testRE("[^cat]*", true, "user", "feels", "good")
+    testRE("[^cat]*", false, "little", "cat")
 }

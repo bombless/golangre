@@ -4,16 +4,20 @@ import(
     "errors"
     "reflect"
     )
+type TransitionPair struct{
+    First CanMatch
+    Second int
+}
 type FiniteAutomachine struct{
-    StatusMap map[int]map[string]int
+    StatusMap map[int][]TransitionPair
     ClosureList map[int][]int
     Final int
 }
-func singleTransition(c string)FiniteAutomachine{
-    return FiniteAutomachine{map[int]map[string]int{0:{c: 1}}, map[int][]int{}, 1}
+func singleTransition(c CanMatch)FiniteAutomachine{
+    return FiniteAutomachine{map[int][]TransitionPair{0:{{c, 1}}}, map[int][]int{}, 1}
 }
 func voidTransition()FiniteAutomachine{
-    return FiniteAutomachine{map[int]map[string]int{}, map[int][]int{}, 0}
+    return FiniteAutomachine{map[int][]TransitionPair{}, map[int][]int{}, 0}
 }
 
 func(fa FiniteAutomachine)Kleene()FiniteAutomachine{
@@ -31,21 +35,21 @@ func(lhs FiniteAutomachine)Pipe(rhs FiniteAutomachine)FiniteAutomachine{
     finalLhs := lhs.Final + shiftLhs
     finalRhs := rhs.Final + shiftRhs
     final := rhs.Final + shiftRhs + 1
-    statusMap := map[int]map[string]int{}
+    statusMap := map[int][]TransitionPair{}
     closureList := map[int][]int{0:{shiftLhs, shiftRhs}, finalLhs:{final}, finalRhs:{final}}
-    for from, transit := range lhs.StatusMap{
-        mapping := map[string]int{}
-        for char, to := range transit{
-            mapping[char] = to + shiftLhs
+    for from, transits := range lhs.StatusMap{
+        pairs := []TransitionPair{}
+        for _, pair := range transits{
+            pairs = append(pairs, TransitionPair{pair.First, pair.Second + shiftLhs})
         }
-        statusMap[from + shiftLhs] = mapping
-    }    
-    for from, transit := range rhs.StatusMap{
-        mapping := map[string]int{}
-        for char, to := range transit{
-            mapping[char] = to + shiftRhs
+        statusMap[from + shiftLhs] = pairs
+    }
+    for from, transits := range rhs.StatusMap{
+        pairs := []TransitionPair{}
+        for _, pair := range transits{
+            pairs = append(pairs, TransitionPair{pair.First, pair.Second + shiftRhs})
         }
-        statusMap[from + shiftRhs] = mapping
+        statusMap[from + shiftRhs] = pairs
     }
     for from, list := range lhs.ClosureList{
         arr := closureList[from + shiftLhs]
@@ -77,9 +81,9 @@ func(lhs FiniteAutomachine)Concat(rhs FiniteAutomachine)FiniteAutomachine{
     }
     closureList[lhs.Final] = append(closureList[lhs.Final], shift)
     for from, mapping := range rhs.StatusMap{
-        record := map[string]int{}
-        for char, to := range mapping{
-            record[char] = to + shift
+        record := []TransitionPair{}
+        for _, pair := range mapping{
+            record = append(record, TransitionPair{pair.First, pair.Second + shift})
         }
         statusMap[from + shift] = record
     }
@@ -92,8 +96,7 @@ func(fa FiniteAutomachine)GetClosures(id int, acc []int)[]int{
     }
     for _, val := range fa.ClosureList[id]{
         if !inArray(acc, val){
-            ret = append(ret, val)
-            ret = append(ret, fa.GetClosures(val, acc)...)
+            ret = append(ret, append(fa.GetClosures(val, acc), val)...)
         }
     }   
     return ret
@@ -106,26 +109,17 @@ func inArray(arr []int, item int)bool{
     }
     return false
 }
-func contains(s string, r rune)bool{
-    for _, char := range s{
-        if char == r{
-            return true
-        }
-    }
-    return false
-}
 func(fa FiniteAutomachine)Test(str string)bool{
     streams := append([]int{0}, fa.GetClosures(0, []int{})...)
     waitForAttach := []int{}
-    for _, char := range str{
-        
+    for _, char := range str{        
         for index := 0; index < len(streams); index += 1{
             match := false
-            for c, val := range fa.StatusMap[streams[index]]{
-                if contains(c, char){
+            for _, pair := range fa.StatusMap[streams[index]]{
+                if pair.First.Match(char){
                     match = true
-                    streams[index] = val
-                    waitForAttach = append(waitForAttach, fa.GetClosures(val, []int{})...)
+                    streams[index] = pair.Second
+                    waitForAttach = append(waitForAttach, fa.GetClosures(pair.Second, []int{})...)
                 }
             }
             if !match{
@@ -139,8 +133,45 @@ func(fa FiniteAutomachine)Test(str string)bool{
     }
     return inArray(streams, fa.Final)
 }
-type Class struct{
-    Content []interface{}
+type CanMatch interface{
+    Match(rune)bool
+}
+type Rune struct{
+    Value rune
+}
+func(this Rune)Match(r rune)bool{
+    return this.Value == r
+}
+func makeRune(r rune)Rune{
+    return Rune{r}
+}
+type PositiveClass struct{
+    Set map[rune]struct{}
+}
+func(c PositiveClass)Match(r rune)bool{
+    _, ret := c.Set[r]
+    return ret
+}
+func makePositiveClass(arr []Rune)PositiveClass{
+    s := PositiveClass{map[rune]struct{}{}}
+    for _, v := range arr{
+        s.Set[v.Value] = struct{}{}
+    }
+    return s
+}
+type NegativeClass struct{
+    Set map[rune]struct{}
+}
+func(c NegativeClass)Match(r rune)bool{
+    _, ret := c.Set[r]
+    return !ret
+}
+func makeNegativeClass(arr []Rune)NegativeClass{
+    s := NegativeClass{map[rune]struct{}{}}
+    for _, v := range arr{
+        s.Set[v.Value] = struct{}{}
+    }
+    return s
 }
 type Group struct{
     Content []interface{}
@@ -152,9 +183,6 @@ type GroupStart struct{}
 type GroupEnd struct{}
 type ClassStart struct{}
 type ClassEnd struct{}
-type Rune struct{
-    Value []rune
-}
 func filterEscaping(r rune)interface{}{
     switch r{
     case 't': return '\t'
@@ -213,6 +241,9 @@ func typeName(i interface{})string{
     case "re.Kleene": return "Kleene"
     case "re.Pipe": return "Pipe"
     case "int32": return "rune"
+    case "re.Rune": return "Rune"
+    case "re.PositiveClass": return "PositiveClass"
+    case "re.NegativeClass": return "NegativeClass"
     case "*errors.errorString": return "error"
     }
     return "other"
@@ -252,6 +283,9 @@ func funcGroupEnd(item interface{}, stack []interface{})([]interface{}, error){
         pack = append(pack, stack[j])
     }
     stack = stack[:i]
+    if len(pack) == 0{
+        return stack, errors.New("Empty group not allowed")
+    }
     return append(stack, Group{pack}), nil
 }
 func funcClassStart(item interface{}, stack []interface{})([]interface{}, error){
@@ -265,16 +299,27 @@ func funcClassEnd(item interface{}, stack []interface{})([]interface{}, error){
     if i < 0{
         return stack, errors.New("unexpected ClassEnd")
     }
-    pack := []interface{}{}
+    pack := []Rune{}
     for j := i + 1; j < len(stack); j += 1{
         name := typeName(stack[j])
-        if name == "GroupStart" || name == "GroupEnd" || name == "ClassEnd"{
+        if name != "Rune"{
+            fmt.Printf("#line300, %v\n", stack)
             return stack, errors.New(fmt.Sprintf("unexpected %v", name))
         }
-        pack = append(pack, stack[j])
+        pack = append(pack, stack[j].(Rune))
     }
     stack = stack[:i]
-    return append(stack, Class{pack}), nil
+    var c CanMatch
+    if len(pack) == 0{
+        return stack, errors.New("Empty positive class not allowed")
+    }else if pack[0].Value != '^'{
+            c = makePositiveClass(pack)
+    }else if len(pack) == 1{
+        return stack, errors.New("Empty  negative class not allowed")
+    }else{
+        c = makeNegativeClass(pack[1:])
+    }
+    return append(stack, c), nil    
 }
 func funcKleene(item interface{}, stack []interface{})([]interface{}, error){
     for _, v := range stack{
@@ -295,7 +340,7 @@ func funcPipe(item interface{}, stack []interface{})([]interface{}, error){
     return append(stack, Pipe{}), nil
 }
 func funcRune(item interface{}, stack []interface{})([]interface{}, error){
-    return append(stack, item), nil
+    return append(stack, makeRune(item.(rune))), nil
 }
 func compile(seq []interface{})([]interface{}, error){
     if len(seq) == 0{
@@ -344,22 +389,17 @@ func(s ClassStart)String()string{
 func(e ClassEnd)String()string{
     return "ClassEnd"
 }
-func(g Group)String()string{
-    return fmt.Sprintf("Group(%v)", g.Content)
-}
-func(c Class)String()string{
-    return fmt.Sprintf("Class(%v)", c.Content)
-}
 func construct(seq []interface{})(FiniteAutomachine, error){
     if len(seq) == 0{
         return voidTransition(), nil
     }else if len(seq) == 1{
         switch typeName(seq[0]){
-            case "Class": return constructClass(seq[0].(Class))
-            case "Group": return constructGroup(seq[0].(Group))
-            case "rune": return singleTransition(string([]rune{seq[0].(rune)})), nil
+            case "Group": return construct(seq[0].(Group).Content)
+            case "PositiveClass": return singleTransition(seq[0].(PositiveClass)), nil
+            case "NegativeClass": return singleTransition(seq[0].(NegativeClass)), nil
+            case "Rune": return singleTransition(seq[0].(Rune)), nil
         }
-        return FiniteAutomachine{}, errors.New(fmt.Sprintf("unexpected %v", seq[0]))
+        return FiniteAutomachine{}, errors.New(fmt.Sprintf("unexpected %v", typeName(seq[0])))
     }
     pipe := -1
     for i, v := range seq{
@@ -393,19 +433,6 @@ func construct(seq []interface{})(FiniteAutomachine, error){
         return FiniteAutomachine{}, err
     }
     return left.Concat(right), nil
-}
-func constructClass(c Class)(FiniteAutomachine, error){
-    arr := []rune{}
-    for _, v := range c.Content{
-        if typeName(v) != "rune"{
-            return FiniteAutomachine{}, errors.New(fmt.Sprintf("unexpected %v", v))
-        }
-        arr = append(arr, v.(rune))
-    }
-    return singleTransition(string(arr)), nil
-}
-func constructGroup(g Group)(FiniteAutomachine, error){
-    return construct(g.Content)
 }
 func RegExp(reg string)(FiniteAutomachine, error){
     seq, err := handle(reg)
