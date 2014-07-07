@@ -337,25 +337,25 @@ func funcClassEnd(item interface{}, stack []interface{})([]interface{}, error){
     pack := []CanMatch{}
     for j := i + 1; j < len(stack); j += 1{
         name := typeName(stack[j])
-        if name != "Rune"{
+        if name != "rune"{
             return stack, errors.New(fmt.Sprintf("unexpected %v", name))
         }
-        r := stack[j].(Rune)
-        if r.Value == '-' && j > i + 1 && j < len(stack) - 1{
-            if j - 2 > i && typeName(stack[j - 2]) == "Rune" && stack[j - 2].(Rune).Value == '-'{
-                notice := string([]rune{stack[j - 2].(Rune).Value, stack[j - 1].(Rune).Value})
+        r := stack[j].(rune)
+        if r == '-' && j > i + 1 && j < len(stack) - 1{
+            if j - 2 > i && typeName(stack[j - 2]) == "rune" && stack[j - 2].(rune) == '-'{
+                notice := string([]rune{stack[j - 2].(rune), stack[j - 1].(rune)})
                 return stack,
                     errors.New("unexpected `-` after " + notice)
             }
-            min, max := stack[j - 1].(Rune), stack[j + 1].(Rune)
-            if min.Value > max.Value{
+            min, max := stack[j - 1].(rune), stack[j + 1].(rune)
+            if min > max{
                 return stack,
-                    errors.New(fmt.Sprintf("value of %c bigger than %c", min.Value, max.Value))
+                    errors.New(fmt.Sprintf("value of %c bigger than %c", min, max))
             }
-            pack[len(pack) - 1] = makeRangeClass(min.Value, max.Value)
+            pack[len(pack) - 1] = makeRangeClass(min, max)
             j += 1
         }else{
-            pack = append(pack, r)
+            pack = append(pack, makeRune(r))
         }
     }
     stack = stack[:i]
@@ -396,10 +396,10 @@ func funcQuantifierEnd(item interface{}, stack []interface{})([]interface{}, err
     left := []rune{}
     right := []rune{}
     for j := i + 1; j < len(stack); j += 1{
-        if typeName(stack[j]) != "Rune"{
+        if typeName(stack[j]) != "rune"{
             return stack, errors.New(fmt.Sprintf("unexpected %v in Quantifier", stack[j]))
         }
-        r := stack[j].(Rune).Value
+        r := stack[j].(rune)
         if r == ','{
             if commaCount > 0{
                 return stack, errors.New("more than 1 comma in Quantifier")
@@ -471,7 +471,7 @@ func funcPipe(item interface{}, stack []interface{})([]interface{}, error){
     return append(stack, Pipe{}), nil
 }
 func funcRune(item interface{}, stack []interface{})([]interface{}, error){
-    return append(stack, makeRune(item.(rune))), nil
+    return append(stack, item), nil
 }
 func compile(seq []interface{})([]interface{}, error){
     if len(seq) == 0{
@@ -488,7 +488,7 @@ func compile(seq []interface{})([]interface{}, error){
     }
     for _, v := range stack{
         name := typeName(v)
-        if name != "Rune" && name != "Group" && name != "ShadowGroup" && name != "Pipe" &&
+        if name != "rune" && name != "Group" && name != "ShadowGroup" && name != "Pipe" &&
             name != "Kleene" && name != "MixedClass" && name != "NegativeClass"{
             return []interface{}{}, errors.New(fmt.Sprintf("unexpected %v", name))
         }
@@ -522,7 +522,7 @@ func construct(seq []interface{})(FiniteAutomachine, error){
             case "ShadowGroup": return construct(seq[0].(ShadowGroup).Content)
             case "MixedClass": return singleTransition(seq[0].(MixedClass)), nil
             case "NegativeClass": return singleTransition(seq[0].(NegativeClass)), nil
-            case "Rune": return singleTransition(seq[0].(Rune)), nil
+            case "rune": return singleTransition(makeRune(seq[0].(rune))), nil
         }
         return FiniteAutomachine{}, errors.New(fmt.Sprintf("unexpected %v", typeName(seq[0])))
     }
