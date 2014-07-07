@@ -39,7 +39,7 @@ func Test(t *testing.T){
 }
 func TestFailure(t *testing.T){
     tests := []string{
-        "[a-b-c]", "*", "(", ")", "|*",
+        "[a-b-c]", "*", "(", ")", "|*", "[|]", "[", "]", "[*]",
     }
     for _, c := range tests{
         _, got := RegExp(c)

@@ -365,21 +365,9 @@ func funcClassEnd(item interface{}, stack []interface{})([]interface{}, error){
     return append(stack, mixedClass), nil    
 }
 func funcKleene(item interface{}, stack []interface{})([]interface{}, error){
-    for _, v := range stack{
-        name := typeName(v)
-        if name == "ClassStart" || name == "ClassEnd"{
-            return stack, errors.New("can not have kleene in class")
-        }
-    }
     return append(stack, Kleene{}), nil
 }
 func funcPipe(item interface{}, stack []interface{})([]interface{}, error){
-    for _, v := range stack{
-        name := typeName(v)
-        if name == "ClassStart" || name == "ClassEnd"{
-            return stack, errors.New("can not have pipe in class")
-        }
-    }
     return append(stack, Pipe{}), nil
 }
 func funcRune(item interface{}, stack []interface{})([]interface{}, error){
