@@ -20,6 +20,32 @@ func Test(t *testing.T){
             []string{ "(((", "[[" },
             []string{ ")", "()" },
         },
+        {
+            `#{,1}([a-f0-9]{6}|[a-f0-9]{3})`,
+            []string{ "#a3c113" },
+            []string{ "#4d82h4" },
+        },
+        {
+            `[a-z0-9-]{1,}`,
+            []string{ "my-title-here" },
+            []string{ "my_title_here" },
+        },
+        {
+            `[a-z0-9_.-]{1,}@[0-9a-z.-]{1,}.[a-z.]{2,6}`,
+            []string{ "john@doe.com" },
+            []string{ "john@doe.something" },
+        },
+        {
+            `(https{,1}://|)[0-9a-z]([0-9a-z-]{1,}[0-9a-z].)*[a-z]{2,6}(/[/a-zA-Z.-]*|)`,
+            []string{ "http://net.tutsplus.com/about" },
+            []string{ "http://google.com/some/file!.html" },
+        },
+        {
+            `((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9]).){3}` +
+            `(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])`,
+            []string{ "73.60.124.136" },
+            []string{ "256.7.3.1", "1.3.4" },
+        },
     }
     for _, c := range tests{
         fa, err := RegExp(c.re)

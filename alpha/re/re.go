@@ -195,6 +195,9 @@ func makeNegativeClass(c MixedClass)NegativeClass{
 type Group struct{
     Content []interface{}
 }
+type ShadowGroup struct{
+    Content []interface{}
+}
 type handleFunction func(interface{}, []interface{})([]interface{}, error)
 type Pipe struct{}
 type Kleene struct{}
@@ -202,6 +205,8 @@ type GroupStart struct{}
 type GroupEnd struct{}
 type ClassStart struct{}
 type ClassEnd struct{}
+type QuantifierStart struct{}
+type QuantifierEnd struct{}
 func filterEscaping(r rune)interface{}{
     switch r{
     case 't': return '\t'
@@ -214,6 +219,8 @@ func filterEscaping(r rune)interface{}{
     case '[': return '['
     case ']': return ']'
     case '\\': return '\\'
+    case '{': return '{'
+    case '}': return '}'
     }
     return errors.New("unexpected " + string([]rune{r}))
 }
@@ -225,6 +232,8 @@ func filterNormal(r rune)interface{}{
     case ')': return GroupEnd{}
     case '[': return ClassStart{}
     case ']': return ClassEnd{}
+    case '{': return QuantifierStart{}
+    case '}': return QuantifierEnd{}
     }
     return r
 }
@@ -255,7 +264,10 @@ func typeName(i interface{})string{
     case "re.GroupEnd": return "GroupEnd"
     case "re.ClassStart": return "ClassStart"
     case "re.ClassEnd": return "ClassEnd"
+    case "re.QuantifierStart": return "QuantifierStart"
+    case "re.QuantifierEnd": return "QuantifierEnd"
     case "re.Group": return "Group"
+    case "re.ShadowGroup": return "ShadowGroup"
     case "re.Class": return "Class"
     case "re.Kleene": return "Kleene"
     case "re.Pipe": return "Pipe"
@@ -275,6 +287,8 @@ func chooseFunction(item interface{})handleFunction{
     case "GroupEnd": return funcGroupEnd
     case "ClassStart": return funcClassStart
     case "ClassEnd": return funcClassEnd
+    case "QuantifierStart": return funcQuantifierStart
+    case "QuantifierEnd": return funcQuantifierEnd
     case "Kleene": return funcKleene
     case "Pipe": return funcPipe
     case "rune": return funcRune
@@ -364,6 +378,92 @@ func funcClassEnd(item interface{}, stack []interface{})([]interface{}, error){
     }
     return append(stack, mixedClass), nil    
 }
+func funcQuantifierStart(item interface{}, stack []interface{})([]interface{}, error){
+    return append(stack, item), nil
+}
+func funcQuantifierEnd(item interface{}, stack []interface{})([]interface{}, error){
+    i := len(stack) - 1
+    for i >= 0 && typeName(stack[i]) != "QuantifierStart"{
+        i -= 1
+    }
+    if i < 0{
+        return stack, errors.New("unexpected QuantifierEnd")
+    }
+    if i == 0{
+        return stack, errors.New("unexpected QuantifierStart")
+    }
+    commaCount := 0
+    left := []rune{}
+    right := []rune{}
+    for j := i + 1; j < len(stack); j += 1{
+        if typeName(stack[j]) != "Rune"{
+            return stack, errors.New(fmt.Sprintf("unexpected %v in Quantifier", stack[j]))
+        }
+        r := stack[j].(Rune).Value
+        if r == ','{
+            if commaCount > 0{
+                return stack, errors.New("more than 1 comma in Quantifier")
+            }
+            commaCount += 1
+            continue
+        }
+        if r < '0' || r > '9'{
+            return stack, errors.New(fmt.Sprintf("unexpected %v in Quantifier", stack[j]))
+        }
+        if commaCount == 0{
+            left = append(left, r)
+        }else{
+            right = append(right, r)
+        }
+    }
+    if len(left) == 0 && len(right) == 0{
+        return stack, errors.New("empty Quantifier not allowed")
+    }
+    if (len(left) > 0 && left[0] == '0') || (len(right) > 0 && right[0] == '0'){
+        return stack, errors.New("invalid number literal in Quantifier")
+    }
+    min := -1
+    max := -1
+    if len(left) > 0{
+        min = int(left[0]) - int('0')
+        for j := 1; j < len(left); j += 1{
+            min = int(left[j]) - int('0') + min * 10
+        }
+    }
+    if len(right) > 0{
+        max = int(right[0]) - int('0')
+        for j := 1; j < len(right); j += 1{
+            max = int(right[j]) - int('0') + max * 10
+        }
+    }
+    if min > -1 && max > -1 && min > max{
+        return stack, errors.New(fmt.Sprintf("%v is larger than %v", min, max))
+    }
+    previousItem := stack[i - 1]
+    ret := []interface{}{}
+    if max > -1{
+        if min == -1{
+            min = 0
+        }
+        for j := min; j <= max; j += 1{
+            for k := 0; k < j; k += 1{
+                ret = append(ret, previousItem)
+            }
+            if j != max{
+                ret = append(ret, Pipe{})
+            }
+        }
+    }else{
+        for j := 0; j < min; j += 1{
+            ret = append(ret, previousItem)
+        }
+        if commaCount == 1{
+            ret = append(ret, previousItem, Kleene{})
+        }
+    }
+    stack[i - 1] = ShadowGroup{ret}
+    return stack[:i], nil
+}
 func funcKleene(item interface{}, stack []interface{})([]interface{}, error){
     return append(stack, Kleene{}), nil
 }
@@ -388,8 +488,8 @@ func compile(seq []interface{})([]interface{}, error){
     }
     for _, v := range stack{
         name := typeName(v)
-        if name == "ClassStart" || name == "ClassEnd" ||
-            name == "GroupStart" || name == "GroupEnd"{
+        if name != "Rune" && name != "Group" && name != "ShadowGroup" && name != "Pipe" &&
+            name != "Kleene" && name != "MixedClass" && name != "NegativeClass"{
             return []interface{}{}, errors.New(fmt.Sprintf("unexpected %v", name))
         }
     }
@@ -419,6 +519,7 @@ func construct(seq []interface{})(FiniteAutomachine, error){
     }else if len(seq) == 1{
         switch typeName(seq[0]){
             case "Group": return construct(seq[0].(Group).Content)
+            case "ShadowGroup": return construct(seq[0].(ShadowGroup).Content)
             case "MixedClass": return singleTransition(seq[0].(MixedClass)), nil
             case "NegativeClass": return singleTransition(seq[0].(NegativeClass)), nil
             case "Rune": return singleTransition(seq[0].(Rune)), nil
