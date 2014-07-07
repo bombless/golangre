@@ -43,3 +43,14 @@ func Test(t *testing.T){
         }
     }
 }
+func TestFailure(t *testing.T){
+    tests := []string{
+        "[a-b-c]", "*", "(", ")", "|*",
+    }
+    for _, c := range tests{
+        _, got := RegExp(c)
+        if got == nil{
+            t.Error("result for " + c + " should cause failure")
+        }
+    }
+}

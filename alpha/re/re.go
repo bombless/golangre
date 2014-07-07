@@ -324,14 +324,19 @@ func funcClassEnd(item interface{}, stack []interface{})([]interface{}, error){
     for j := i + 1; j < len(stack); j += 1{
         name := typeName(stack[j])
         if name != "Rune"{
-            fmt.Printf("#line300, %v\n", stack)
             return stack, errors.New(fmt.Sprintf("unexpected %v", name))
         }
         r := stack[j].(Rune)
         if r.Value == '-' && j > i + 1 && j < len(stack) - 1{
+            if j - 2 > i && typeName(stack[j - 2]) == "Rune" && stack[j - 2].(Rune).Value == '-'{
+                notice := string([]rune{stack[j - 2].(Rune).Value, stack[j - 1].(Rune).Value})
+                return stack,
+                    errors.New("unexpected `-` after " + notice)
+            }
             min, max := stack[j - 1].(Rune), stack[j + 1].(Rune)
             if min.Value > max.Value{
-                return stack, errors.New(fmt.Sprintf("value of %v bigger than %v", min.Value, max.Value))
+                return stack,
+                    errors.New(fmt.Sprintf("value of %c bigger than %c", min.Value, max.Value))
             }
             pack[len(pack) - 1] = makeRangeClass(min.Value, max.Value)
             j += 1
