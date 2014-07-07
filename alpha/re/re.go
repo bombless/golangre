@@ -283,25 +283,25 @@ func typeName(i interface{})string{
 }
 func chooseFunction(item interface{})handleFunction{
     switch typeName(item){
-    case "GroupStart": return funcGroupStart
-    case "GroupEnd": return funcGroupEnd
-    case "ClassStart": return funcClassStart
-    case "ClassEnd": return funcClassEnd
-    case "QuantifierStart": return funcQuantifierStart
-    case "QuantifierEnd": return funcQuantifierEnd
-    case "Kleene": return funcKleene
-    case "Pipe": return funcPipe
-    case "rune": return funcRune
+    case "GroupStart": return funcDirectInsert
+    case "GroupEnd": return funcGroup
+    case "ClassStart": return funcDirectInsert
+    case "ClassEnd": return funcClass
+    case "QuantifierStart": return funcDirectInsert
+    case "QuantifierEnd": return funcQuantifier
+    case "Kleene": return funcDirectInsert
+    case "Pipe": return funcDirectInsert
+    case "rune": return funcDirectInsert
     }
     return funcError
 }
 func funcError(item interface{}, stack []interface{})([]interface{}, error){
     return stack, errors.New("unexpected input")
 }
-func funcGroupStart(item interface{}, stack []interface{})([]interface{}, error){
+func funcDirectInsert(item interface{}, stack []interface{})([]interface{}, error){
     return append(stack, item), nil
 }
-func funcGroupEnd(item interface{}, stack []interface{})([]interface{}, error){
+func funcGroup(item interface{}, stack []interface{})([]interface{}, error){
     i := len(stack) - 1
     for i >= 0 && typeName(stack[i]) != "GroupStart"{
         i -= 1
@@ -323,10 +323,7 @@ func funcGroupEnd(item interface{}, stack []interface{})([]interface{}, error){
     }
     return append(stack, Group{pack}), nil
 }
-func funcClassStart(item interface{}, stack []interface{})([]interface{}, error){
-    return append(stack, ClassStart{}), nil
-}
-func funcClassEnd(item interface{}, stack []interface{})([]interface{}, error){
+func funcClass(item interface{}, stack []interface{})([]interface{}, error){
     i := len(stack) - 1
     for i >= 0 && typeName(stack[i]) != "ClassStart"{
         i -= 1
@@ -378,10 +375,7 @@ func funcClassEnd(item interface{}, stack []interface{})([]interface{}, error){
     }
     return append(stack, mixedClass), nil    
 }
-func funcQuantifierStart(item interface{}, stack []interface{})([]interface{}, error){
-    return append(stack, item), nil
-}
-func funcQuantifierEnd(item interface{}, stack []interface{})([]interface{}, error){
+func funcQuantifier(item interface{}, stack []interface{})([]interface{}, error){
     i := len(stack) - 1
     for i >= 0 && typeName(stack[i]) != "QuantifierStart"{
         i -= 1
@@ -463,15 +457,6 @@ func funcQuantifierEnd(item interface{}, stack []interface{})([]interface{}, err
     }
     stack[i - 1] = ShadowGroup{ret}
     return stack[:i], nil
-}
-func funcKleene(item interface{}, stack []interface{})([]interface{}, error){
-    return append(stack, Kleene{}), nil
-}
-func funcPipe(item interface{}, stack []interface{})([]interface{}, error){
-    return append(stack, Pipe{}), nil
-}
-func funcRune(item interface{}, stack []interface{})([]interface{}, error){
-    return append(stack, item), nil
 }
 func compile(seq []interface{})([]interface{}, error){
     if len(seq) == 0{
