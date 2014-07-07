@@ -228,14 +228,14 @@ func filterNormal(r rune)interface{}{
     }
     return r
 }
-func filtering(reg string)([]interface{}, error){
+func lexing(reg string)([]interface{}, error){
     escaping := false
     ret := []interface{}{}
     for _, v := range reg{
         if escaping{
             escaped := filterEscaping(v)
-            if reflect.TypeOf(escaped).String() == "*errors.errorString"{
-                return []interface{}{}, escaped.(error)
+            if typeName(escaped) == "error"{
+                return ret, escaped.(error)
             }
             ret = append(ret, escaped)
             escaping = false
@@ -407,13 +407,6 @@ func compile(seq []interface{})([]interface{}, error){
     }
     return stack, nil
 }
-func handle(reg string)([]interface{}, error){
-    seq, err := filtering(reg)
-    if err != nil{
-        return []interface{}{}, err
-    }
-    return compile(seq)
-}
 func(p Pipe)String()string{
     return "|"
 }
@@ -479,7 +472,11 @@ func construct(seq []interface{})(FiniteAutomachine, error){
     return left.Concat(right), nil
 }
 func RegExp(reg string)(FiniteAutomachine, error){
-    seq, err := handle(reg)
+    seq, err := lexing(reg)
+    if err != nil{
+        return FiniteAutomachine{}, err
+    }
+    seq, err = compile(seq)
     if err != nil{
         return FiniteAutomachine{}, err
     }
