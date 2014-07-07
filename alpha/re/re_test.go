@@ -6,14 +6,19 @@ func Test(t *testing.T){
         matches, mismatches []string
     }{
         {
-            "Marry|has|a|little|goat",
+            `Marry|has|a|little|goat`,
             []string{ "Marry", "has", "a", "little", "goat" },
             []string{ "Nothing", "lasts", "forever" },
         },
         {
-            "[_a-zA-Z][_a-zA-Z0-9]*",
+            `[_a-zA-Z][_a-zA-Z0-9]*`,
             []string{ "var", "foo", "base64" },
             []string{ "one space", "1mystery" },
+        },
+        {
+            `we|need|parenthesis|and|brackets|\(*|\[*`,
+            []string{ "(((", "[[" },
+            []string{ ")", "()" },
         },
     }
     for _, c := range tests{
@@ -21,11 +26,10 @@ func Test(t *testing.T){
         if err != nil{
             t.Error(err)
         }else{
-            pairs := map[bool][]string{
+            for want, inputs := range map[bool][]string{
                 true: c.matches,
                 false: c.mismatches,
-            }
-            for want, inputs := range pairs{
+            }{
                 for _, input := range inputs{
                     got := fa.Test(input)
                     if got != want{
