@@ -299,7 +299,7 @@ func funcError(item interface{}, stack []interface{})([]interface{}, error){
     return stack, errors.New("unexpected input")
 }
 func funcGroupStart(item interface{}, stack []interface{})([]interface{}, error){
-    return append(stack, GroupStart{}), nil
+    return append(stack, item), nil
 }
 func funcGroupEnd(item interface{}, stack []interface{})([]interface{}, error){
     i := len(stack) - 1
